@@ -7,7 +7,7 @@
  *
  * Features:
  * - Async code support (top-level await via async wrapper)
- * - Output sanitization (sensitive data redaction)
+ * - Output serialization and truncation (without redaction)
  * - Output truncation (configurable max bytes)
  * - Timeout handling
  * - Detailed error classification
@@ -17,11 +17,7 @@ import { createErrorResponse, ToolResult } from '@/common/tool-handler';
 import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { cdpSessionManager } from '@/utils/cdp-session-manager';
-import {
-  DEFAULT_MAX_OUTPUT_BYTES,
-  sanitizeAndLimitOutput,
-  sanitizeText,
-} from '@/utils/output-sanitizer';
+import { DEFAULT_MAX_OUTPUT_BYTES, sanitizeAndLimitOutput } from '@/utils/output-sanitizer';
 
 // ============================================================================
 // Constants
@@ -201,15 +197,12 @@ function parseExceptionDetails(details: CDPExceptionDetails): ExecutionError {
   const rawMessage =
     exceptionDescription || exceptionValue || text || 'JavaScript execution failed';
 
-  // Sanitize the message
-  const message = sanitizeText(rawMessage).text;
-
   // Classify the error kind
   const isSyntaxError = exceptionClassName === 'SyntaxError' || /SyntaxError/i.test(rawMessage);
 
   return {
     kind: isSyntaxError ? 'syntax_error' : 'runtime_error',
-    message,
+    message: rawMessage,
     details: {
       url: details.url,
       lineNumber: details.lineNumber,
@@ -249,9 +242,12 @@ async function executeViaCdp(
       };
     }
 
-    // Extract and sanitize the result
+    // Extract, serialize, and limit the result
     const value = extractReturnValue(response?.result);
-    const sanitized = sanitizeAndLimitOutput(value, { maxBytes: options.maxOutputBytes });
+    const sanitized = sanitizeAndLimitOutput(value, {
+      maxBytes: options.maxOutputBytes,
+      redact: false,
+    });
 
     return {
       ok: true,
@@ -270,7 +266,7 @@ async function executeViaCdp(
     }
 
     if (isDebuggerConflictError(error)) {
-      const message = sanitizeText(error instanceof Error ? error.message : String(error)).text;
+      const message = error instanceof Error ? error.message : String(error);
       return {
         ok: false,
         engine: 'cdp',
@@ -278,7 +274,7 @@ async function executeViaCdp(
       };
     }
 
-    const message = sanitizeText(error instanceof Error ? error.message : String(error)).text;
+    const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
       engine: 'cdp',
@@ -349,8 +345,8 @@ async function executeViaScripting(
       const rawMessage = result.error?.message ?? 'JavaScript execution failed';
       const rawStack = result.error?.stack;
 
-      const message = sanitizeText(rawMessage).text;
-      const sanitizedStack = rawStack ? sanitizeText(rawStack).text : undefined;
+      const message = rawMessage;
+      const sanitizedStack = rawStack;
 
       const isSyntaxError = result.error?.name === 'SyntaxError' || /SyntaxError/i.test(rawMessage);
 
@@ -364,8 +360,11 @@ async function executeViaScripting(
       };
     }
 
-    // Sanitize the successful result
-    const sanitized = sanitizeAndLimitOutput(result.value, { maxBytes: options.maxOutputBytes });
+    // Serialize and limit the successful result
+    const sanitized = sanitizeAndLimitOutput(result.value, {
+      maxBytes: options.maxOutputBytes,
+      redact: false,
+    });
 
     return {
       ok: true,
@@ -387,7 +386,7 @@ async function executeViaScripting(
       };
     }
 
-    const message = sanitizeText(error instanceof Error ? error.message : String(error)).text;
+    const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
       engine: 'scripting',

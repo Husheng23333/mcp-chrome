@@ -837,7 +837,7 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.JAVASCRIPT,
     description:
-      'Execute JavaScript code in a browser tab and return the result. Uses CDP Runtime.evaluate with awaitPromise and returnByValue; automatically falls back to chrome.scripting.executeScript if the debugger is busy. Output is sanitized (sensitive data redacted) and truncated by default.',
+      'Execute JavaScript code in a browser tab and return the result. Uses CDP Runtime.evaluate with awaitPromise and returnByValue; automatically falls back to chrome.scripting.executeScript if the debugger is busy. Output is serialized and size-limited, without redacting content.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -857,7 +857,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         maxOutputBytes: {
           type: 'number',
           description:
-            'Maximum output size in bytes after sanitization (default: 51200). Output exceeding this limit will be truncated.',
+            'Maximum output size in bytes (default: 51200). Output exceeding this limit will be truncated.',
         },
       },
       required: ['code'],

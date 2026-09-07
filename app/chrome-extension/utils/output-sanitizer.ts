@@ -10,6 +10,8 @@
 export const DEFAULT_MAX_OUTPUT_BYTES = 50 * 1024;
 
 export interface OutputSanitizerOptions {
+  /** Whether to redact sensitive values. Disabled for local JavaScript debugging by default. */
+  redact?: boolean;
   maxBytes?: number;
   maxDepth?: number;
   maxArrayLength?: number;
@@ -67,6 +69,7 @@ export function sanitizeAndLimitOutput(
   value: unknown,
   options: OutputSanitizerOptions = {},
 ): SanitizedOutput {
+  const redact = options.redact ?? true;
   const maxBytes = normalizePositiveInt(options.maxBytes, DEFAULT_MAX_OUTPUT_BYTES);
   const maxDepth = normalizePositiveInt(options.maxDepth, DEFAULT_MAX_DEPTH);
   const maxArrayLength = normalizePositiveInt(options.maxArrayLength, DEFAULT_MAX_ARRAY_LENGTH);
@@ -74,6 +77,7 @@ export function sanitizeAndLimitOutput(
   const maxStringLength = normalizePositiveInt(options.maxStringLength, DEFAULT_MAX_STRING_LENGTH);
 
   const { value: sanitizedValue, redacted } = sanitizeValue(value, {
+    redact,
     maxDepth,
     maxArrayLength,
     maxObjectKeys,
@@ -95,7 +99,9 @@ export function sanitizeAndLimitOutput(
  * 对字符串进行敏感信息脱敏
  * 参考 mcp-tools.js 的脱敏逻辑，增加 Base64/Hex/cookie-query 识别
  */
-export function sanitizeText(text: string): { text: string; redacted: boolean } {
+export function sanitizeText(text: string, redact = true): { text: string; redacted: boolean } {
+  if (!redact) return { text, redacted: false };
+
   let out = text;
   let redacted = false;
 
@@ -181,13 +187,14 @@ function looksLikeQueryString(text: string): boolean {
 function sanitizeValue(
   value: unknown,
   limits: {
+    redact: boolean;
     maxDepth: number;
     maxArrayLength: number;
     maxObjectKeys: number;
     maxStringLength: number;
   },
 ): { value: unknown; redacted: boolean } {
-  const { maxDepth, maxArrayLength, maxObjectKeys, maxStringLength } = limits;
+  const { redact, maxDepth, maxArrayLength, maxObjectKeys, maxStringLength } = limits;
   const seen = new WeakMap<object, unknown>();
   let redacted = false;
 
@@ -195,7 +202,7 @@ function sanitizeValue(
     if (depth < 0) return '[MaxDepth]';
 
     if (typeof v === 'string') {
-      const sanitized = sanitizeText(v);
+      const sanitized = sanitizeText(v, redact);
       if (sanitized.redacted) redacted = true;
       let s = sanitized.text;
       if (s.length > maxStringLength) {
@@ -241,7 +248,7 @@ function sanitizeValue(
     const len = Math.min(keys.length, maxObjectKeys);
     for (let i = 0; i < len; i++) {
       const key = keys[i];
-      if (isSensitiveKey(key)) {
+      if (redact && isSensitiveKey(key)) {
         out[key] = '<redacted>';
         redacted = true;
         continue;
