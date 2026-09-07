@@ -119,3 +119,19 @@ pnpm --filter @chrome-mcp/wasm-simd test
 ```json
 { "status": "ok", "message": "pong" }
 ```
+
+## 跨设备 npm 打包
+
+将当前魔改后的 Native Server 构建并打包为可拷贝到其他电脑安装的本地 npm 包：
+
+```bash
+pnpm build:shared && pnpm build:native && cd app/native-server && pnpm pack --pack-destination ../..
+```
+
+命令执行后，项目根目录会生成 `mcp-chrome-bridge-<version>.tgz`。将该文件拷贝到另一台电脑后执行：
+
+```bash
+npm install -g ./mcp-chrome-bridge-<version>.tgz
+```
+
+目标电脑需要安装 Node.js `>=20.0.0`。安装时会执行 `postinstall` 并注册 Chrome Native Messaging Host。
